@@ -67,7 +67,7 @@ DEBUG = False
 MAXREPLY = 65536
 
 CONNECTION_TIMEOUT = 1
-OPERATION_TIMEOUT = 20 # minimal for gmail if miss
+OPERATION_TIMEOUT = 20 # minimal 6 for gmail if miss
 
 UNDECIDED = 'UNDECIDED'
 VALID = 'VALID'
@@ -107,55 +107,58 @@ def find_mx(domain):
     try:
         mxs = [x.to_text().split() for x in dns.resolver.query(domain, 'MX')]
     except dns.resolver.NXDOMAIN:
-        host = domain
+        servers = [(domain, 25)]
     except dns.resolver.NoAnswer:
-        host = domain
+        servers = [(domain, 25)]
     else:
         mxs.sort(key=lambda x: int(x[0]))
-        host = mxs[0][1]
-    if DEBUG: print "MX resolved to:", host
-    return host
+        servers = [(mx[1], 25) for mx in mxs]
+
+    if DEBUG: print "MX resolved to:", servers
+    return servers
 
 def find_submission(domain):
     import dns.resolver
 
-    port = None
-
     try:
         mxs = [x.to_text().split() for x in dns.resolver.query("_submission._tcp.%s" % domain, 'SRV')]
     except dns.resolver.NXDOMAIN:
-        host = None
+        servers = None
     else:
         mxs = filter(lambda x: int(x[1]), mxs)
         mxs.sort(key=lambda x: int(x[0]))
         if mxs:
-            host = mxs[0][3]
-            port = int(mxs[0][2])
+            servers = [(mxs[0][3], int(mxs[0][2]))]
 
-    if DEBUG: print "_SUBMISSION resolved to:", host, ":", port
-    return (host, port)
+    if DEBUG: print "_SUBMISSION resolved to:", mxs[0][3], ":", int(mxs[0][2])
+    return servers
             
     
-def connect(server, port, domain):
-    real_port = port
-    if server is None:
-        if port == "SMTP":
-            real_port = 25
-            server = find_mx(domain)
-        elif port == "_SUBMISSION":
-            (server, real_port) = find_submission(domain)
+def connect(servers, protocol, domain):
+    if servers is None:
+        if protocol == "SMTP":
+            servers = find_mx(domain)
+        elif protocol == "_SUBMISSION":
+            servers = find_submission(domain)
 
-    if not server:
+    if not servers:
         if (DEBUG): print "Server is None, but auto detection unavailable for the port. Giving up."
         return None
 
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(CONNECTION_TIMEOUT)
 
-    try:
-        sock.connect((server, real_port))
-    except socket.error,why:
-        if DEBUG: print "Unable to connect:", why
+    for connection in servers:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(CONNECTION_TIMEOUT)
+            sock.connect(connection)
+        except socket.error,why:
+            if DEBUG: print "Unable to connect to:", connection[0], ":", connection[1], "::", why
+            sock.close()
+            continue
+        else:
+            if DEBUG: print "Connected to:", connection[0], ":", connection[1]
+            break
+    else:
         return None
 
     return sock
@@ -216,13 +219,13 @@ def check_email(email):
         return NOT_VALID
 
     if screenplays.has_key(domain):
-        (server, port, screenplay,) = screenplays[domain]
+        (servers, protocol, screenplay,) = screenplays[domain]
     elif screenplays.has_key('default'):
-        (server, port, screenplay,) = screenplays['default']
+        (servers, protocol, screenplay,) = screenplays['default']
     else:
         return UNDECIDED
 
-    s = connect(server, port, domain)
+    s = connect(servers, protocol, domain)
     if not s: return NOT_VALID
     
     for shot in screenplay:
