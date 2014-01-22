@@ -93,7 +93,7 @@ steps_mail_ru = [( '', [(RE220, UNDECIDED),] ),
                 ( auth_plain, [ (REMAILRUNOUSER, NOT_VALID), (REMAILRUYESUSER, VALID) ]),
                 ("QUIT\n", [])]
 
-Screenplays = {
+screenplays = {
     'mail.ru' : ( None, '_SUBMISSION', steps_mail_ru ),
     'bk.ru' : ( None, '_SUBMISSION', steps_mail_ru ),
     'inbox.ru' : ( None, '_SUBMISSION', steps_mail_ru ),
@@ -215,10 +215,10 @@ def check_email(email):
     except ValueError:
         return NOT_VALID
 
-    if Screenplays.has_key(domain):
-        (server, port, screenplay,) = Screenplays[domain]
-    elif Screenplays.has_key('default'):
-        (server, port, screenplay,) = Screenplays['default']
+    if screenplays.has_key(domain):
+        (server, port, screenplay,) = screenplays[domain]
+    elif screenplays.has_key('default'):
+        (server, port, screenplay,) = screenplays['default']
     else:
         return UNDECIDED
 
